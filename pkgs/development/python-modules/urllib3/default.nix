@@ -1,6 +1,6 @@
 { stdenv, buildPythonPackage, fetchPypi
 , pytest, mock, tornado, pyopenssl, cryptography
-, idna, certifi, ipaddress, pysocks }:
+, idna, certifi, ipaddress, pysocks, brotlipy }:
 
 buildPythonPackage rec {
   pname = "urllib3";
@@ -23,7 +23,7 @@ buildPythonPackage rec {
   doCheck = false;
 
   checkInputs = [ pytest mock tornado ];
-  propagatedBuildInputs = [ pyopenssl cryptography idna certifi ipaddress pysocks ];
+  propagatedBuildInputs = [ pyopenssl cryptography idna certifi ipaddress pysocks brotlipy ];
 
   meta = with stdenv.lib; {
     description = "Powerful, sanity-friendly HTTP client for Python";

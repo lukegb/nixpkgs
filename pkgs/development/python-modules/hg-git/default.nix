@@ -2,29 +2,21 @@
 , buildPythonPackage
 , fetchPypi
 , dulwich
-, isPy3k
 , fetchpatch
 }:
 
 buildPythonPackage rec {
   pname = "hg-git";
-  version = "0.8.12";
-  disabled = isPy3k;
+  version = "0.9.0a1";
 
   src = fetchPypi {
     inherit pname version;
-    sha256 = "13hbm0ki6s88r6p65ibvrbxnskinzdz0m9gsshb8s571p91ymfjn";
+    sha256 = "1lhb813zljki3q10bx3n9d7c075s6ahhak5d3a1m6gaxmy6gzj5y";
   };
 
-  propagatedBuildInputs = [ dulwich ];
+  doCheck = false;
 
-  # Needs patch to work with Mercurial 4.8
-  # https://bitbucket.org/durin42/hg-git/issues/264/unexpected-keyword-argument-createopts-hg
-  patches =
-    fetchpatch {
-      url = "https://bitbucket.org/rsalmaso/hg-git/commits/a778506fd4be0bf1afa75755f6ee9260fa234a0f/raw";
-      sha256 = "12r4qzbc5xcqwv0kvf8g4wjji7n45421zkbf6i75vyi4nl6n4j15";
-    };
+  propagatedBuildInputs = [ dulwich ];
 
   meta = with stdenv.lib; {
     description = "Push and pull from a Git server using Mercurial";

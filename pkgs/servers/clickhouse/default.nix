@@ -7,14 +7,14 @@
 
 stdenv.mkDerivation rec {
   pname = "clickhouse";
-  version = "20.5.2.7";
+  version = "20.11.4.13";
 
   src = fetchFromGitHub {
     owner  = "ClickHouse";
     repo   = "ClickHouse";
     rev    = "v${version}-stable";
     fetchSubmodules = true;
-    sha256 = "15b499czsv727wwdb1i1ja5wfsk6ii3pqpk6dlqic9cdmkh8c8ic";
+    sha256 = "0c87k0xqwj9sc3xy2f3ngfszgjiz4rzd787bdg6fxp94w1adjhny";
   };
 
   nativeBuildInputs = [ cmake libtool lldClang.bintools ninja ];

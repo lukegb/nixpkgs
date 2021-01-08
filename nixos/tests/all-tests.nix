@@ -300,6 +300,7 @@ in
   plasma5 = handleTest ./plasma5.nix {};
   plotinus = handleTest ./plotinus.nix {};
   podman = handleTestOn ["x86_64-linux"] ./podman.nix {};
+  pomerium = handleTestOn ["x86_64-linux"] ./pomerium.nix {};
   postfix = handleTest ./postfix.nix {};
   postfix-raise-smtpd-tls-security-level = handleTest ./postfix-raise-smtpd-tls-security-level.nix {};
   postgis = handleTest ./postgis.nix {};

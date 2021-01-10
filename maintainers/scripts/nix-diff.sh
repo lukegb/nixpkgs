@@ -260,7 +260,7 @@ for gen in $gens; do
         else
             echo "$tag"
         fi
-        cat "$out" \
+        cat "$out"  \
             | sed 's:^:    :'
 
         print_line=1

@@ -622,6 +622,8 @@ mount --move /sys $targetRoot/sys
 mount --move /dev $targetRoot/dev
 mount --move /run $targetRoot/run
 
-exec env -i $(type -P switch_root) "$targetRoot" "$stage2Init"
+echo trivial change to stage 1
+
+exec env -i $(type -P switch_root) "$targetRoot" "$stage2Init"  # add a comment
 
 fail # should never be reached

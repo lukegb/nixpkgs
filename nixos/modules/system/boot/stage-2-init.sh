@@ -19,6 +19,8 @@ for o in $(</proc/cmdline); do
     esac
 done
 
+# Trivial change to stage 2
+
 
 # Print a greeting.
 echo
@@ -46,7 +48,7 @@ if [ ! -e /proc/1 ]; then
         install -m 0755 -d "$mountPoint"
         mount -n -t "$fsType" -o "$options" "$device" "$mountPoint"
     }
-    source @earlyMountScript@
+    source @earlyMountScript@  # Does shellcheck hate this?
 fi
 
 
@@ -106,7 +108,7 @@ fi
 
 
 # Use /etc/resolv.conf supplied by systemd-nspawn, if applicable.
-if [ -n "@useHostResolvConf@" ] && [ -e /etc/resolv.conf ]; then
+if [ -n "@useHostResolvConf@" ] && [ -e /etc/resolv.conf ]; then  # see this
     resolvconf -m 1000 -a host </etc/resolv.conf
 fi
 

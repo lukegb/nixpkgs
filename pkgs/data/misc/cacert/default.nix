@@ -1,5 +1,7 @@
 { lib, stdenv, fetchurl, nss, python3
+, buildcatrust
 , blacklist ? []
+, extraCertificates ? []
 
 # Used for tests only
 , runCommand
@@ -9,10 +11,17 @@
 
 with lib;
 
+# extraCertificates should be paths or strings.
+assert length (filter (f: !(builtins.isPath f || builtins.isString f)) extraCertificates) == 0;
+
 let
   version = "3.63";
 
   underscoreVersion = builtins.replaceStrings ["."] ["_"] version;
+
+  isPathIntoStore = f: builtins.isString f && substring 0 (stringLength builtins.storeDir) f == builtins.storeDir;
+  extraCertificateFiles = filter (f: builtins.isPath f || isPathIntoStore f) extraCertificates;
+  extraCertificateStrings = filter builtins.isString extraCertificates;
 in
 
 stdenv.mkDerivation {
@@ -23,53 +32,72 @@ stdenv.mkDerivation {
     sha256 = "0892xbjcaw6g4rd2rs4qa37nbda248cjrgxa4faaw0licbpjyb8q";
   };
 
-  certdata2pem = fetchurl {
-    name = "certdata2pem.py";
-    urls = [
-      "https://salsa.debian.org/debian/ca-certificates/raw/debian/20170717/mozilla/certdata2pem.py"
-      "https://git.launchpad.net/ubuntu/+source/ca-certificates/plain/mozilla/certdata2pem.py?id=47e49e1e0a8a1ca74deda27f88fe181191562957"
-    ];
-    sha256 = "1d4q27j1gss0186a5m8bs5dk786w07ccyq0qi6xmd2zr1a8q16wy";
-  };
+  outputs = [ "out" "unbundled" "p11kit" ];
 
-  outputs = [ "out" "unbundled" ];
-
-  nativeBuildInputs = [ python3 ];
+  buildInputs = [
+    buildcatrust
+  ];
 
   configurePhase = ''
     ln -s nss/lib/ckfw/builtins/certdata.txt
 
-    cat << EOF > blacklist.txt
-    ${concatStringsSep "\n" (map (c: ''"${c}"'') blacklist)}
+    cat << EOF > blocklist.txt
+    ${concatStringsSep "\n" blacklist}
     EOF
 
-    # copy from the store, otherwise python will scan it for imports
-    cat "$certdata2pem" > certdata2pem.py
+    cat << EOF > extra-certificates-bundle.crt
+    ${concatStringsSep "\n\n" extraCertificateStrings}
+    EOF
   '';
 
   buildPhase = ''
-    python certdata2pem.py | grep -vE '^(!|UNTRUSTED)'
-
-    for cert in *.crt; do
-      echo $cert | cut -d. -f1 | sed -e 's,_, ,g' >> ca-bundle.crt
-      cat $cert >> ca-bundle.crt
-      echo >> ca-bundle.crt
-    done
+    mkdir unbundled
+    buildcatrust \
+      --certdata_input certdata.txt \
+      --ca_bundle_input extra-certificates-bundle.crt ${concatStringsSep " " extraCertificateFiles} \
+      --blocklist blocklist.txt \
+      --ca_bundle_output ca-bundle.crt \
+      --ca_unpacked_output unbundled \
+      --p11kit_output ca-bundle.trust.p11-kit
   '';
 
   installPhase = ''
     mkdir -pv $out/etc/ssl/certs
     cp -v ca-bundle.crt $out/etc/ssl/certs
+
+    # install p11-kit specific output to p11kit output
+    mkdir -pv $p11kit/etc/ssl/trust-source
+    cp -v ca-bundle.trust.p11-kit $p11kit/etc/ssl/trust-source
+
     # install individual certs in unbundled output
     mkdir -pv $unbundled/etc/ssl/certs
-    cp -v *.crt $unbundled/etc/ssl/certs
-    rm -f $unbundled/etc/ssl/certs/ca-bundle.crt  # not wanted in unbundled
+    cp -v unbundled/*.crt $unbundled/etc/ssl/certs
   '';
 
   setupHook = ./setup-hook.sh;
 
   passthru.updateScript = ./update.sh;
-  passthru.tests = {
+  passthru.tests = let
+    isTrusted = ''
+      isTrusted() {
+        # isTrusted <unbundled-dir> <ca name> <ca sha256 fingerprint>
+        for f in $1/etc/ssl/certs/*.crt; do
+          if ! [[ -s $f ]]; then continue; fi
+          fingerprint="$(openssl x509 -in "$f" -noout -fingerprint -sha256 | cut -f2 -d=)"
+          if [[ "x$fingerprint" == "x$3" ]]; then
+            # If the certificate is treated as rejected for TLS Web Server, then we consider it untrusted.
+            if openssl x509 -in "$f" -noout -text | grep -q '^Rejected Uses:'; then
+              if openssl x509 -in "$f" -noout -text | grep -A1 '^Rejected Uses:' | grep -q 'TLS Web Server'; then
+                return 1
+              fi
+            fi
+            return 0
+          fi
+        done
+        return 1
+      }
+    '';
+  in {
     # Test that building this derivation with a blacklist works, and that UTF-8 is supported.
     blacklist-utf8 = let
       blacklistCAToFingerprint = {
@@ -86,20 +114,11 @@ stdenv.mkDerivation {
 
       nativeBuildInputs = [ openssl ];
     } ''
-      isPresent() {
-        # isPresent <unbundled-dir> <ca name> <ca sha256 fingerprint>
-        for f in $1/etc/ssl/certs/*.crt; do
-          fingerprint="$(openssl x509 -in "$f" -noout -fingerprint -sha256 | cut -f2 -d=)"
-          if [[ "x$fingerprint" == "x$3" ]]; then
-            return 0
-          fi
-        done
-        return 1
-      }
+      ${isTrusted}
 
       # Ensure that each certificate is in the main "cacert".
       ${mapBlacklist (caName: caFingerprint: ''
-        isPresent "$cacert" "${caName}" "${caFingerprint}" || ({
+        isTrusted "$cacert" "${caName}" "${caFingerprint}" || ({
           echo "CA fingerprint ${caFingerprint} (${caName}) is missing from the CA bundle. Consider picking a different CA for the blacklist test." >&2
           exit 1
         })
@@ -107,8 +126,63 @@ stdenv.mkDerivation {
 
       # Ensure that each certificate is NOT in the "cacertWithExcludes".
       ${mapBlacklist (caName: caFingerprint: ''
-        isPresent "$cacertWithExcludes" "${caName}" "${caFingerprint}" && ({
+        isTrusted "$cacertWithExcludes" "${caName}" "${caFingerprint}" && ({
           echo "CA fingerprint ${caFingerprint} (${caName}) is present in the cacertWithExcludes bundle." >&2
+          exit 1
+        })
+      '')}
+
+      touch $out
+    '';
+
+    # Test that we can add additional certificates to the store, and have them be trusted.
+    extra-certificates = let
+      extraCertificateStr = ''
+        -----BEGIN CERTIFICATE-----
+        MIIB5DCCAWqgAwIBAgIUItvsAYEIdYDkOIo5sdDYMcUaNuIwCgYIKoZIzj0EAwIw
+        KTEnMCUGA1UEAwweTml4T1MgY2FjZXJ0IGV4dHJhIGNlcnRpZmljYXRlMB4XDTIx
+        MDYxMjE5MDQzMFoXDTIyMDYxMjE5MDQzMFowKTEnMCUGA1UEAwweTml4T1MgY2Fj
+        ZXJ0IGV4dHJhIGNlcnRpZmljYXRlMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEuP8y
+        lAm6ZyQt9v/P6gTlV/a9R+D61WjucW04kaegOhg8csiluimYodiSv0Pbgymu+Zxm
+        A3Bz9QGmytaYTiJ16083rJkwwIhqoYl7kWsLzreSTaLz87KH+rdeol59+H0Oo1Mw
+        UTAdBgNVHQ4EFgQUCxuHfvqI4YVU5M+A0+aKvd1LrdswHwYDVR0jBBgwFoAUCxuH
+        fvqI4YVU5M+A0+aKvd1LrdswDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNo
+        ADBlAjEArgxgjdNmRlSEuai0dzlktmBEDZKy2Iiul+ttSoce9ohfEVYESwO602HW
+        keVvI56vAjBCro3dc3m2TuktiKO6lQV56PUEyxko4H/sR5pnHlduCGRDlFzQKXf/
+        pMMmtj7cVb8=
+        -----END CERTIFICATE-----
+      '';
+      extraCertificateFile = ./test-cert-file.crt;
+      extraCertificatesToFingerprint = {
+        # String above
+        "NixOS cacert extra certificate string" = "A3:20:D0:84:96:97:25:FF:98:B8:A9:6D:A3:7C:89:95:6E:7A:77:21:92:F3:33:E9:31:AF:5E:03:CE:A9:E5:EE";
+
+        # File
+        "NixOS cacert extra certificate file" = "88:B8:BE:A7:57:AC:F1:FE:D6:98:8B:50:E0:BD:0A:AE:88:C7:DF:70:26:E1:67:5E:F5:F6:91:27:FF:02:D4:A5";
+      };
+      mapExtra = f: concatStringsSep "\n" (mapAttrsToList f extraCertificatesToFingerprint);
+    in runCommand "verify-the-cacert-extra-output" {
+      cacert = cacert.unbundled;
+      cacertWithExtras = (cacert.override {
+        extraCertificates = [ extraCertificateStr extraCertificateFile ];
+      }).unbundled;
+
+      nativeBuildInputs = [ openssl ];
+    } ''
+      ${isTrusted}
+
+      # Ensure that the extra certificate is not in the main "cacert".
+      ${mapExtra (extraName: extraFingerprint: ''
+        isTrusted "$cacert" "${extraName}" "${extraFingerprint}" && ({
+          echo "'extra' CA fingerprint ${extraFingerprint} (${extraName}) is present in the main CA bundle." >&2
+          exit 1
+        })
+      '')}
+
+      # Ensure that the extra certificates ARE in the "cacertWithExtras".
+      ${mapExtra (extraName: extraFingerprint: ''
+        isTrusted "$cacertWithExtras" "${extraName}" "${extraFingerprint}" || ({
+          echo "CA fingerprint ${extraFingerprint} (${extraName}) is not present in the cacertWithExtras bundle." >&2
           exit 1
         })
       '')}

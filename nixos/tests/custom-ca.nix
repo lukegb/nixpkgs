@@ -109,9 +109,7 @@ in
 
       environment.systemPackages = with pkgs; [
         xdotool
-        # Firefox was disabled here, because we needed to disable p11-kit support in nss,
-        # which is why it will not use the system certificate store for the time being.
-        # firefox
+        firefox
         chromium
         falkon
         midori
@@ -155,7 +153,7 @@ in
     browsers = [
       # Firefox was disabled here, because we needed to disable p11-kit support in nss,
       # which is why it will not use the system certificate store for the time being.
-      # "firefox",
+      "firefox",
       "chromium",
       "falkon",
       "midori"

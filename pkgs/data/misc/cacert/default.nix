@@ -72,7 +72,7 @@ stdenv.mkDerivation rec {
       --blocklist "${blocklist}" \
       --ca_bundle_output ca-bundle.crt \
       --ca_standard_bundle_output ca-no-trust-rules-bundle.crt \
-      --ca_unpacked_output unbundled \
+      --ca_hashed_unpacked_output unbundled \
       --p11kit_output ca-bundle.trust.p11-kit
   '';
 
@@ -86,7 +86,9 @@ stdenv.mkDerivation rec {
     install -D -t "$p11kit/etc/ssl/trust-source" ca-bundle.trust.p11-kit
 
     # install individual certs in unbundled output
-    install -D -t "$unbundled/etc/ssl/certs" unbundled/*.crt
+    install -d "$unbundled/etc/ssl"
+    # We use cp here because we want to preserve symlinks.
+    cp -r unbundled "$unbundled/etc/ssl/certs"
   '';
 
   setupHook = ./setup-hook.sh;

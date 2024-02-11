@@ -35,6 +35,19 @@ in
       certificates themselves, this can have security consequences depending on your usecases.
     '';
 
+    security.pki.installUnbundledCACerts = mkEnableOption ''installing unbundled CA certificates alongside the bundled set.
+
+      This is useful for running software, usually software not compiled from
+      source within nixpkgs, that expects the /etc/ssl/certs directory to
+      contain a set of certificates and symlinks to certificates based on the
+      OpenSSL c_rehash scheme.
+
+      If you see software attempting to access /etc/ssl/certs/HHHHHHHH.0 files,
+      where H is a bunch of hex characters, then this option is for you.
+    '' // {
+      default = true;
+    };
+
     security.pki.certificateFiles = mkOption {
       type = types.listOf types.path;
       default = [];
@@ -99,6 +112,9 @@ in
 
     # P11-Kit trust source.
     environment.etc."ssl/trust-source".source = "${cacertPackage.p11kit}/etc/ssl/trust-source";
+
+    # Unbundled certificates.
+    environment.etc."ssl/certs".source = mkIf cfg.installUnbundledCACerts "${cacertPackage.unbundled}/etc/ssl/certs/*";
 
   };
 

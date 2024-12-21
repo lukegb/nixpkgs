@@ -52,6 +52,8 @@
 , asio
 , decklinkSupport ? false
 , blackmagic-desktop-video
+, ajaSupport ? false
+, libajantv2
 , libdatachannel
 , libvpl
 , qrcodegencpp
@@ -150,7 +152,8 @@ stdenv.mkDerivation (finalAttrs: {
   ++ optional alsaSupport alsa-lib
   ++ optional pulseaudioSupport libpulseaudio
   ++ optionals pipewireSupport [ pipewire libdrm ]
-  ++ optional withFdk fdk_aac;
+  ++ optional withFdk fdk_aac
+  ++ optional ajaSupport libajantv2;
 
   # Copied from the obs-linuxbrowser
   postUnpack = ''

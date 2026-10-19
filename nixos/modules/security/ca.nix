@@ -11,6 +11,7 @@ let
     blacklist = cfg.caCertificateBlacklist;
     extraCertificateFiles = cfg.certificateFiles;
     extraCertificateStrings = cfg.certificates;
+    useNixpkgsBlockedCerts = cfg.useNixpkgsBlockedCerts;
   };
   caBundleName = if cfg.useCompatibleBundle then "ca-no-trust-rules-bundle.crt" else "ca-bundle.crt";
   caBundle = "${cacertPackage}/etc/ssl/certs/${caBundleName}";
@@ -92,6 +93,15 @@ in
       readOnly = true;
       description = ''
         (Read-only) the path to the final bundle of certificate authorities as a single file.
+      '';
+    };
+
+    security.pki.useNixpkgsBlockedCerts = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Include nixpkgs' local list of blocked certificates on top of those
+        in Mozilla's NSS.
       '';
     };
   };

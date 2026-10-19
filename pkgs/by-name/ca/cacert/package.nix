@@ -8,6 +8,8 @@
   extraCertificateFiles ? [ ],
   extraCertificateStrings ? [ ],
 
+  useNixpkgsBlockedCerts ? true,
+
   # Used for tests only
   runCommand,
   cacert,
@@ -78,7 +80,7 @@ stdenv.mkDerivation {
       --certdata_input certdata.txt \
       --ca_bundle_input "${extraCertificatesBundle}" ${
         lib.escapeShellArgs (map (arg: "${arg}") extraCertificateFiles)
-      } \
+      } ${lib.optionalString useNixpkgsBlockedCerts "'${./extra-blocked-certs.crt}'"} \
       --blocklist "${blocklist}" \
       --ca_bundle_output ca-bundle.crt \
       --ca_standard_bundle_output ca-no-trust-rules-bundle.crt \
